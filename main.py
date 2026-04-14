@@ -1,27 +1,29 @@
 from flask import Flask,jsonify,request
+import uuid
 
 app = Flask(__name__)
 
 tasks= [
 {
-    "id" : 1,
+    "id" : str(uuid.uuid4()),
     "title":"learn flask",
     "completed": False
 },
 
 {
-    "id" : 2,
+    "id" : str(uuid.uuid4()),
     "title":"build API",
     "completed": False
 },
 
 {
-    "id" : 3,
+    "id" : str(uuid.uuid4()),
     "title":"Test with postman",
     "completed": True
 }
 ]
 
+str(uuid.uuid4())
 task_id_counter = 4 
 
 @app.route("/")
@@ -37,7 +39,7 @@ def get_tasks():
        
 @app.route("/tasks/<task_id>")
 def get_task_by_id(task_id):
-    task_id = int(task_id)
+    # task_id = int(task_id)
     
     for task in tasks:
         if task["id"] == task_id:
@@ -60,7 +62,7 @@ def echo():
     
     new_task = {
         "completed" : False,
-        "id" : task_id_counter,
+        "id" : str(uuid.uuid4()),
         "title" : body["title"]
     }
     
@@ -70,7 +72,7 @@ def echo():
 
 @app.route("/tasks/<task_id>", methods= ["PUT"])
 def update(task_id):
-    task_id = int(task_id)
+    # task_id = int(task_id)
     body = request.json
     
     if not bool(body) :
@@ -94,7 +96,7 @@ def update(task_id):
     
 @app.route("/tasks/<task_id>", methods= ["DELETE"])
 def delete(task_id):
-    task_id = int(task_id)
+    # task_id = int(task_id)
     
     for task in tasks:
         if task["id"] == task_id:
