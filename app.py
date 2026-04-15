@@ -1,4 +1,5 @@
 from flask import Flask,jsonify,request
+from werkzeug.exceptions import NotFound, BadRequest, Conflict, UnprocessableEntity
 import uuid
 
 app = Flask(__name__)
@@ -24,7 +25,25 @@ tasks= [
 ]
 
 str(uuid.uuid4())
-task_id_counter = 4 
+
+
+@app.errorhandler(NotFound)
+def handle_type_error(e):
+    return jsonify({
+        "error": str(e)
+    }), 404
+
+@app.errorhandler(BadRequest)
+def handle_type_error(e):
+    return jsonify({
+        "error": str(e)
+    }), 400
+    
+@app.errorhandler(UnprocessableEntity)
+def handle_type_error(e):
+    return jsonify({
+        "error": str(e)
+    }), 422
 
 @app.route("/")
 def home():
@@ -39,7 +58,6 @@ def get_tasks():
        
 @app.route("/tasks/<task_id>")
 def get_task_by_id(task_id):
-    # task_id = int(task_id)
     
     for task in tasks:
         if task["id"] == task_id:
@@ -47,18 +65,23 @@ def get_task_by_id(task_id):
     return jsonify({
         "message" : "Not found"
             }),404
+
        
+       
+#==============Create Task=====================       
 
 @app.route("/tasks", methods= ["POST"])
-def echo():
-    global task_id_counter
-    body = request.json
+def create_task():
+    body = request.get_json()
+    if body == {}:
+        raise BadRequest("Request body must be full JSON")
     
-    if not bool(body) :
-        return jsonify({
-            "success" : False,
-            "error" : "json body required"
-        }), 400
+    title = body["title"]                
+    if not isinstance(title, str): 
+        raise BadRequest("Title must be a string")
+    
+    if not title.strip():
+        raise UnprocessableEntity("Title cannot be empty")
     
     new_task = {
         "completed" : False,
@@ -66,20 +89,26 @@ def echo():
         "title" : body["title"]
     }
     
-    task_id_counter += 1 
     tasks.append(new_task)
     return jsonify(new_task),201
 
+
+#===============Update Task by ID=====================
+
 @app.route("/tasks/<task_id>", methods= ["PUT"])
 def update(task_id):
-    # task_id = int(task_id)
-    body = request.json
+    body = request.get_json()
     
-    if not bool(body) :
-        return jsonify({
-            "success" : False,
-            "error" : "json body required"
-        }), 400
+    if body == {}:
+        raise BadRequest("Request body must be full JSON")
+    
+    title = body["title"]
+    if not isinstance(title, str):
+        raise BadRequest("Title must be a string")
+    
+    completed = body["completed"]
+    if not isinstance(completed, bool):
+        raise BadRequest("completed must be bool.")
         
     for task in tasks:
         if task["id"] == task_id:
@@ -96,7 +125,6 @@ def update(task_id):
     
 @app.route("/tasks/<task_id>", methods= ["DELETE"])
 def delete(task_id):
-    # task_id = int(task_id)
     
     for task in tasks:
         if task["id"] == task_id:
