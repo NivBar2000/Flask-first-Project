@@ -57,27 +57,30 @@ def create_task_route():
 @tasks_bp.route("/tasks/<task_id>", methods= ["PUT"])    #! בעיה בפונקציה לא עובד כמו שצריך
 def update(task_id):
     body = request.get_json(silent=True)
-    title = body["title"]
     
     if body is None:
         raise BadRequest("Missing JSON body")
+   
+   
+    # if body == {}:
+    #     raise BadRequest("Request body must be full JSON")
+    title = body.get("title")
+    if title:
+        if not isinstance(title, str):
+            raise BadRequest("Title must be a string")
     
-    if body == {}:
-        raise BadRequest("Request body must be full JSON")
-
-    if not isinstance(title, str):
-        raise BadRequest("Title must be a string")
     
-    completed = body["completed"]
-    if not isinstance(completed, bool):
-        raise BadRequest("completed must be bool.")
+    completed = body.get("completed")
+    if completed:
+        if not isinstance(completed, bool):
+            raise BadRequest("completed must be bool.")
         
     updated_task = update_task(body, task_id)
 
     if updated_task is None:
         raise NotFound(f"Task with id {task_id} not found")
     
-    return update_task
+    return jsonify(updated_task)
 
     
            
