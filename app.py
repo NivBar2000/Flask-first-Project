@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 
 from routes import tasks_bp
 from errors import error_bp

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo App</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Todo List</h1>
+ 
+    <form id="add-form">
+      <input
+        type="text"
+        id="new-title"
+        placeholder="What needs to be done?"
+        autocomplete="off"
+        required
+      />
+      <button type="submit">Add</button>
+    </form>
+ 
+    <ul id="task-list"></ul>
+ 
+    <p id="empty-msg" class="empty-msg hidden">No tasks yet. Add one above!</p>
+    <p id="error-msg" class="error-msg hidden"></p>
+  </div>
+ 
+  <script>
+    // ── Base URL matching Postman collection host ──────────────────────────────
+    const BASE = "http://127.0.0.1:5000";
+    const API  = `${BASE}/tasks`;
+ 
+    const taskList = document.getElementById("task-list");
+    const emptyMsg = document.getElementById("empty-msg");
+    const errorMsg = document.getElementById("error-msg");
+    const addForm  = document.getElementById("add-form");
+    const newTitle = document.getElementById("new-title");
+ 
+    // ── Helpers ────────────────────────────────────────────────────────────────
+ 
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove("hidden");
+      setTimeout(() => errorMsg.classList.add("hidden"), 4000);
+    }
+ 
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+ 
+    function renderTasks(tasks) {
+      taskList.innerHTML = "";
+      emptyMsg.classList.toggle("hidden", tasks.length > 0);
+ 
+      tasks.forEach(task => {
+        const li = document.createElement("li");
+        li.className = "task-item" + (task.completed ? " completed" : "");
+        // MongoDB ObjectID stored in task.id (or task._id — normalised in loadTasks)
+        li.dataset.id = task.id;
+ 
+        li.innerHTML = `
+          <label class="checkbox-label">
+            <input type="checkbox" class="toggle-cb" ${task.completed ? "checked" : ""} />
+            <span class="title-text">${escapeHtml(task.title)}</span>
+          </label>
+          <div class="actions">
+            <button class="btn-edit"   title="Edit">&#9998;</button>
+            <button class="btn-delete" title="Delete">&#10005;</button>
+          </div>
+        `;
+ 
+        li.querySelector(".toggle-cb").addEventListener("change", () =>
+          toggleTask(task.id, !task.completed)
+        );
+        li.querySelector(".btn-delete").addEventListener("click", () =>
+          deleteTask(task.id)
+        );
+        li.querySelector(".btn-edit").addEventListener("click", () =>
+          startEdit(li, task)
+        );
+ 
+        taskList.appendChild(li);
+      });
+    }
+ 
+    // ── API calls — matched to Postman collection ──────────────────────────────
+ 
+    /**
+     * [GET] /tasks
+     * Fetches all tasks.
+     * Handles both a plain array response and a wrapped { data: [...] } shape.
+     */
+    async function loadTasks() {
+      try {
+        const res  = await fetch(API);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "Failed to load tasks");
+ 
+        // Normalise: unwrap `data` if present, otherwise use body directly
+        const tasks = Array.isArray(body) ? body : (body.data ?? []);
+ 
+        // Normalise MongoDB _id → id so the rest of the code can use task.id
+        const normalised = tasks.map(t => ({
+          ...t,
+          id: t.id ?? t._id
+        }));
+ 
+        renderTasks(normalised);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+ 
+    /**
+     * [GET] /tasks/<id>
+     * Fetch a single task by its MongoDB ObjectID.
+     * Not wired to a UI button here, but exported so it can be called if needed.
+     */
+    async function getTaskById(id) {
+      const res  = await fetch(`${API}/${id}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Task ${id} not found`);
+      return body.data ?? body;
+    }
+ 
+    /**
+     * [POST] /tasks
+     * Body: { "title": "<string>" }
+     * Returns the created task inside body.data.
+     */
+    async function createTask(title) {
+      const res  = await fetch(API, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ title }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to create task");
+      return body.data ?? body;
+    }
+ 
+    /**
+     * [PUT] /tasks/<id>
+     * Body can contain { "completed": <bool> } and/or { "title": "<string>" }.
+     * Matches both the "update tasks" and the edit-title use-cases in the collection.
+     */
+    async function updateTask(id, patch) {
+      const res  = await fetch(`${API}/${id}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(patch),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to update task");
+      return body.data ?? body;
+    }
+ 
+    /**
+     * [DELETE] /tasks/<id>
+     * Matches "[DELETE] task from tasks" in the Postman collection.
+     * The Flask route returns a plain text string (not JSON), so we
+     * read the response as text instead of calling .json().
+     */
+    async function deleteTask(id) {
+      try {
+        const res = await fetch(`${API}/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          // Error responses may still be JSON (BadRequest / NotFound)
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || "Failed to delete task");
+        }
+        // Success → plain text: "task deleted successfully"
+        loadTasks();
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+ 
+    // ── Toggle completed ───────────────────────────────────────────────────────
+ 
+    async function toggleTask(id, completed) {
+      try {
+        await updateTask(id, { completed });
+        loadTasks();
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+ 
+    // ── Inline edit ────────────────────────────────────────────────────────────
+ 
+    async function saveEdit(id, newTitleValue) {
+      try {
+        await updateTask(id, { title: newTitleValue });
+        loadTasks();
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+ 
+    function startEdit(li, task) {
+      const label     = li.querySelector(".checkbox-label");
+      const titleSpan = li.querySelector(".title-text");
+      const editBtn   = li.querySelector(".btn-edit");
+ 
+      const input = document.createElement("input");
+      input.type      = "text";
+      input.className = "edit-input";
+      input.value     = task.title;
+ 
+      label.replaceChild(input, titleSpan);
+      editBtn.textContent = "Save";
+      input.focus();
+ 
+      const finish = () => {
+        const val = input.value.trim();
+        if (val && val !== task.title) {
+          saveEdit(task.id, val);
+        } else {
+          loadTasks(); // revert if unchanged or empty
+        }
+      };
+ 
+      editBtn.onclick = finish;
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter")  finish();
+        if (e.key === "Escape") loadTasks();
+      });
+    }
+ 
+    // ── Form submit → [POST] /tasks ────────────────────────────────────────────
+ 
+    addForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const title = newTitle.value.trim();
+      if (!title) return;
+      try {
+        await createTask(title);
+        newTitle.value = "";
+        loadTasks();
+      } catch (e) {
+        showError(e.message);
+      }
+    });
+ 
+    // ── Boot: [GET] /tasks ─────────────────────────────────────────────────────
+    loadTasks();
+  </script>
+</body>
+</html>
+ 

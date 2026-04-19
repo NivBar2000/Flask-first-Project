@@ -1,4 +1,4 @@
-from flask import jsonify,request,Blueprint
+from flask import jsonify,request,Blueprint, render_template
 from werkzeug.exceptions import NotFound, BadRequest, Conflict, UnprocessableEntity
 # from models import get_all_tasks, get_task_by_id,update_task,delete_task, tasks
 from db import db
@@ -11,9 +11,7 @@ tasks_bp = Blueprint("tasks", __name__)
 #========== first page =============
 @tasks_bp.route("/")
 def home():
-    return jsonify({
-        "message" : "Welcome to my API"
-    })
+    return render_template("index.html")
 
 #============ show all tasks ===========
 @tasks_bp.route("/tasks", methods =["GET"])
@@ -135,7 +133,7 @@ def update(task_id):
             return task
     
   
-                  
+#============= delete task ====================
     
 @tasks_bp.route("/tasks/<task_id>", methods= ["DELETE"])
 def delete(task_id):
